@@ -109,12 +109,16 @@ Dimensión del dataset resultante
 Se generaron evidencias de los siguientes puntos:
 
 - Processing Job con estatus Completed en SageMaker
+  ![Processing Job Completed](images/processing_job_completed.png)
   
 - Repositorio e imagen publicados en Amazon ECR
+  ![ECR Repository](images/ecr_repository.png)
 
 - Archivo de salida almacenado en Amazon S3
+  ![S3 Output](images/s3_output.png)
 
-- Validación del output en notebook mediante:
+- Validación del output en notebook
+![Notebook Output](images/notebook_output.png)
 
 
 
