@@ -1,137 +1,145 @@
-# Tarea 05: MLOps en Práctica — AWS Sagemaker
+# Tarea 06: SageMaker Processing Job — BYOC con scikit-learn
 ## Diana Arroyo / Luis Cuadros
 
 ## Descripción del proyecto
-Diseño, entrenamiento y despliegue en la nube de un pipeline de Machine Learning de extremo a extremo para pronosticar las ventas mensuales de productos por tienda. El proyecto implementa una arquitectura Bring Your Own Container (BYOC) en Amazon SageMaker, garantizando un entorno escalable, aislado y listo para producción.
+En esta tarea se implementó un SageMaker Processing Job usando el patrón Bring Your Own Container (BYOC) para ejecutar una lógica de preprocesamiento de datos con `scikit-learn`, `pandas` y `numpy`.
 
-Esta tarea pone a prueba los conceptos revisados de MLOps, Docker, Git Workflow y AWS Sagemaker.
+El objetivo fue construir un flujo reproducible y desacoplado del entorno local, donde SageMaker administra la transferencia de archivos entre Amazon S3 y el contenedor, mientras que el script de procesamiento trabaja únicamente con rutas locales dentro de `/opt/ml/processing/`.
+
+El procesamiento realizado transforma el archivo crudo `sales_train.csv` en un dataset agregado a nivel mensual, generando como salida el archivo `monthly_sales.csv`, el cual posteriormente queda almacenado en S3.
 
 ---
 
 ## Estructura del repositorio
 ```text
-.
-├── artifacts
-│   ├── logs
-│   │   ├── prep_20260302_043537.log
-│   │   ├── prep_20260302_044034.log
-│   │   ├── prep_20260302_044117.log
-│   │   └── prep_20260302_044526.log
-│   └── model.joblib
-├── data
-│   ├── images
-│   ├── inference
-│   │   └── test.csv
-│   ├── predictions
-│   │   └── Prediccion_Equipo2.csv
-│   ├── prep
-│   │   └── monthly_sales.csv
-│   └── raw
-│       ├── sales_train.csv
-│       ├── sample_submission.csv
-│       └── test.csv
-├── requirements.txt
-└── src
-    ├── container   #NUEVA CARPETA que sigue la estructura del notebook
-    │   ├── build_and_push.sh
-    │   ├── Dockerfile
-    │   └── scripts-src
-    │       ├── nginx.conf
-    │       ├── predictor.py
-    │       ├── serve
-    │       ├── train
-    │       └── wsgi.py
-    ├── data        #NUEVA CARPETA que sigue la estructura del notebook
-    │   └── monthly_sales.csv    
-    ├── inference
-    │   ├── Dockerfile
-    │   ├── inference.py
-    │   └── test
-    │       └── test_inference.py
-    ├── preprocessing
-    │   ├── Dockerfile
-    │   ├── prep.py
-    │   └── test
-    │       └── test_preprocessing.py
-    ├── training
-    │   ├── Dockerfile
-    │   ├── test
-    │   │   └── test_train.py
-    │   └── train.py
-    └── sm_train_build_your_own_container.ipynb
-
+Tarea_6/
+├── data/
+│   └── raw/
+│       └── sales_train.csv
+├── processing/
+│   ├── container/
+│   │   └── Dockerfile
+│   └── prep.py
+├── sm_processing_byoc.ipynb
+├── README.md
+└── requirements.txt
+├── images/
+│   ├── processing_job_completed.png
+│   ├── ecr_repository.png
+│   ├── s3_output.png
+│   └── notebook_output.png
 ```
 ---
 
-## Git Workflow
-La presente tarea se encuentra en el repositorio llamado Tarea-3-Equipo2 en la rama `feature/sagemaker-training-byoc`. Para subir los cambios se usaron los siguientes comandos:
+## Flujo de procesamiento
+En este flujo, SageMaker administra automáticamente la entrada y salida mediante ProcessingInput y ProcessingOutput, por lo que el script no necesita leer ni escribir directamente en S3.
 
-```sh
-git checkout feature/sagemaker-training-byoc
-git add .
-git commit -m "AWS Sagemaker"
-git push origin feature/sagemaker-training-byoc
-```
+## Script de preprocesamiento: processing/prep.py
 
-La presente rama se creó a partir de la rama `development`.
+Este archivo contiene la lógica de transformación del dataset.
+
+Su función es:
+
+- leer el archivo sales_train.csv desde /opt/ml/processing/input/
+- transformar los datos a nivel mensual
+- generar el archivo monthly_sales.csv en /opt/ml/processing/output/
+
+El script fue diseñado para ejecutarse dentro del contenedor del Processing Job y trabajar con rutas locales administradas por SageMaker.
 
 
-## AWS
+## Contenedor BYOC: processing/container/Dockerfile
 
-#### ECR
+Se construyó una imagen Docker mínima basada en python:3.11-slim, con las dependencias necesarias para ejecutar el script de procesamiento.
 
-Se creó un repositorio en Amazon ECR llamado **supermarket** a partir del script denominado `build_and_push.sh`.
+Dependencias instaladas en la imagen:
 
-```sh
-bash build_and_push.sh supermarket
-```
-![ECR](data/images/ecr.png)
+- pandas
+- numpy
+- scikit-learn
 
-#### Buckets
+El contenedor se mantuvo simple y enfocado únicamente en procesamiento, sin incluir componentes de training o serving.
 
-El bucket en donde se introdujo el csv de entrenamiento se llamó **sales_supermarket** y se creó a partir del script llamado `build_and_push.sh`.
+## Notebook de ejecución: sm_processing_byoc.ipynb
 
-![bucket1](data/images/bucket_input.png)
+Este notebook implementa el flujo completo de ejecución en SageMaker:
 
-Adicionalmente, se guardó el modelo en el bucket llamado **output**.
+1. Inicialización de la sesión de SageMaker
+2. Obtención de región, rol y bucket por defecto
+3. Definición de rutas locales del proyecto
+4. Carga del dataset crudo a S3
+5. Construcción de la imagen Docker
+6. Publicación de la imagen en Amazon ECR
+7. Creación del ScriptProcessor
+8. Ejecución del Processing Job
+9. Validación del output generado en S3
+10. Inspección del archivo transformado con pandas
 
-![bucket2](data/images/bucket_output.png)
+## Construcción y publicación de la imagen
 
-#### Entrenamiento
-Se entrenó el script de entrenamiento `train` contenido en la carpeta `src/container/scripts-src` con el siguiente código:
+La imagen del contenedor fue construida localmente en SageMaker Studio y posteriormente publicada en Amazon ECR.
 
-```python
-tree = sage.estimator.Estimator(
-    image,
-    role,
-    1,
-    "ml.c4.2xlarge",
-    output_path=s3_output_path,
-    sagemaker_session=sess,
-)
+- Repositorio en ECR: tarea-6-processing-byoc
+- Tag utilizado: latest
 
-tree.fit(data_location)
-```
-A continuación se muestra una captura de pantalla del **output** del entrenamiento del modelo.
+## Ejecución del Processing Job
 
-![training](data/images/training.png)
+El job se ejecutó con ScriptProcessor utilizando:
 
-#### Deploy del modelo
-Se desplegó el modelo usando el siguiente código.
+- imagen publicada en Amazon ECR
+- rol de ejecución de SageMaker
+- instancia ml.m5.large
+- input desde S3
+- output hacia S3
 
-```python
-from sagemaker.serializers import CSVSerializer
-predictor = tree.deploy(1, "ml.m4.xlarge", serializer=CSVSerializer())
-```
-A continuación se muestra una captura de pantalla del **output** del deploy del modelo.
+La ejecución concluyó exitosamente con estatus **Completed**.
 
-![deploy](data/images/deploy.png)
+## Resultado obtenido
 
-Adicionalmente, se muestra una captura de pantalla de una predicción en tiempo real.
+El archivo de salida generado fue:
+s3://sagemaker-us-east-1-995371347105/tarea-6-processing-byoc/output/monthly_sales.csv
 
-![prediction](data/images/prediction.png)
+La validación en notebook confirmó que el archivo fue generado correctamente y que su estructura final es la esperada.
 
-#### Endpoint
-Al desplegar el modelo con el código mostrado anteriormente, se creó un endpoint que permite recibir datos en tiempo real y devolver predicciones del modelo entrenado.
+Columnas del output
+- date_block_num
+- shop_id
+- item_id
+- item_cnt_month
 
-![endpoint](data/images/endpoint.png)
+Dimensión del dataset resultante
+(1609124, 4)
+
+## Evidencias de ejecución
+
+### 1. Processing Job completado en SageMaker
+
+<img src="images/processing_job_completed.png" width="900">
+
+### 2. Repositorio e imagen publicados en Amazon ECR
+
+<img src="images/ecr_repository.png" width="900">
+
+### 3. Archivo de salida almacenado en Amazon S3
+
+<img src="images/s3_output.png" width="900">
+
+### 4. Validación del output en notebook
+
+<img src="images/notebook_output.png" width="900">
+
+
+## Tecnologías y dependencias utilizadas
+
+- Python 3.11
+- Amazon SageMaker
+- Amazon S3
+- Amazon ECR
+- boto3
+- sagemaker
+- pandas
+- numpy
+- scikit-learn
+
+## Conclusión
+
+Con esta implementación se construyó exitosamente un pipeline de preprocesamiento reproducible usando Amazon SageMaker Processing con un contenedor propio. El enfoque BYOC permitió controlar las dependencias del entorno, desacoplar la lógica de transformación del ambiente local y generar un flujo escalable listo para integrarse con etapas posteriores del pipeline de machine learning.
