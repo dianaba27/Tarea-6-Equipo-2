@@ -104,22 +104,18 @@ Columnas del output
 Dimensión del dataset resultante
 (1609124, 4)
 
-## Evidencia de ejecución
+<h2>Evidencias de ejecución</h2>
 
-Se generaron evidencias de los siguientes puntos:
-
-- Processing Job con estatus Completed en SageMaker
-  ![Processing Job Completed](images/processing_job_completed.png)
-  
-- Repositorio e imagen publicados en Amazon ECR
-  ![ECR Repository](images/ecr_repository.png)
-
-- Archivo de salida almacenado en Amazon S3
-  ![S3 Output](images/s3_output.png)
-
-- Validación del output en notebook
-![Notebook Output](images/notebook_output.png)
-
+<table>
+  <tr>
+    <td><b>1. Processing Job completado</b><br><img src="images/processing_job_completed.png" width="450"></td>
+    <td><b>2. Imagen en ECR</b><br><img src="images/ecr_repository.png" width="450"></td>
+  </tr>
+  <tr>
+    <td><b>3. Archivo de salida en S3</b><br><img src="images/s3_output.png" width="450"></td>
+    <td><b>4. Validación en notebook</b><br><img src="images/notebook_output.png" width="450"></td>
+  </tr>
+</table>
 
 
 ## Tecnologías y dependencias utilizadas
