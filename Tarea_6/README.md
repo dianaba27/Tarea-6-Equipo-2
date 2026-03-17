@@ -26,66 +26,7 @@ Tarea_6/
 ```
 ---
 
-Componentes principales
-1. processing/prep.py
-
-Este script contiene la lógica de transformación de datos.
-Su función principal es:
-
-leer el archivo crudo desde /opt/ml/processing/input/sales_train.csv
-
-transformar las ventas a nivel mensual
-
-generar el archivo de salida en /opt/ml/processing/output/monthly_sales.csv
-
-El script no interactúa directamente con S3, ya que SageMaker se encarga de mover los archivos mediante ProcessingInput y ProcessingOutput.
-
-2. processing/container/Dockerfile
-
-Se construyó una imagen Docker mínima basada en python:3.11-slim, con las dependencias necesarias para ejecutar el script de procesamiento:
-
-pandas
-
-numpy
-
-scikit-learn
-
-El contenedor se mantuvo simple, sin configuración de clústeres ni archivos adicionales de serving/training, ya que esta tarea corresponde exclusivamente a un Processing Job.
-
-Contenido base del contenedor:
-
-imagen base: python:3.11-slim
-
-instalación de dependencias con pip
-
-ENTRYPOINT ["python3"]
-
-3. sm_processing_byoc.ipynb
-
-Este notebook implementa el flujo completo del Processing Job:
-
-Configuración de la sesión de SageMaker
-
-Obtención de región, rol y bucket por defecto
-
-Definición de rutas locales del proyecto
-
-Carga del archivo crudo a S3
-
-Construcción de la imagen Docker
-
-Publicación de la imagen en Amazon ECR
-
-Creación y ejecución del ScriptProcessor
-
-Escritura del output en S3
-
-Lectura e inspección del archivo transformado
-
 Flujo de procesamiento
-
-El flujo implementado fue el siguiente:
-
 S3 (datos crudos)
    ↓
 /opt/ml/processing/input/
@@ -96,34 +37,97 @@ prep.py
    ↓
 S3 (datos procesados)
 
-SageMaker administra automáticamente la transferencia del archivo de entrada y del archivo de salida entre S3 y el contenedor.
+En este flujo, SageMaker administra automáticamente la entrada y salida mediante ProcessingInput y ProcessingOutput, por lo que el script no necesita leer ni escribir directamente en S3.
+
+Componentes principales
+1) Script de preprocesamiento: processing/prep.py
+
+Este archivo contiene la lógica de transformación del dataset.
+
+Su función es:
+
+leer el archivo sales_train.csv desde /opt/ml/processing/input/
+
+transformar los datos a nivel mensual
+
+generar el archivo monthly_sales.csv en /opt/ml/processing/output/
+
+El script fue diseñado para ejecutarse dentro del contenedor del Processing Job y trabajar con rutas locales administradas por SageMaker.
+
+2) Contenedor BYOC: processing/container/Dockerfile
+
+Se construyó una imagen Docker mínima basada en python:3.11-slim, con las dependencias necesarias para ejecutar el script de procesamiento.
+
+Dependencias instaladas en la imagen:
+
+pandas
+
+numpy
+
+scikit-learn
+
+El contenedor se mantuvo simple y enfocado únicamente en procesamiento, sin incluir componentes de training o serving.
+
+3) Notebook de ejecución: sm_processing_byoc.ipynb
+
+Este notebook implementa el flujo completo de ejecución en SageMaker:
+
+Inicialización de la sesión de SageMaker
+
+Obtención de región, rol y bucket por defecto
+
+Definición de rutas locales del proyecto
+
+Carga del dataset crudo a S3
+
+Construcción de la imagen Docker
+
+Publicación de la imagen en Amazon ECR
+
+Creación del ScriptProcessor
 
 Ejecución del Processing Job
 
-El Processing Job se ejecutó mediante ScriptProcessor, usando:
+Validación del output generado en S3
+
+Inspección del archivo transformado con pandas
+
+Construcción y publicación de la imagen
+
+La imagen del contenedor fue construida localmente en SageMaker Studio y posteriormente publicada en Amazon ECR.
+
+Repositorio en ECR:
+
+tarea-6-processing-byoc
+
+Tag utilizado:
+
+latest
+Ejecución del Processing Job
+
+El job se ejecutó con ScriptProcessor utilizando:
 
 imagen publicada en Amazon ECR
 
-una instancia ml.m5.large
+rol de ejecución de SageMaker
 
-entrada desde S3
+instancia ml.m5.large
 
-salida hacia S3
+input desde S3
 
-La ejecución fue exitosa y el script generó correctamente el archivo:
+output hacia S3
 
-monthly_sales.csv
+La ejecución concluyó exitosamente con estatus Completed.
+
 Resultado obtenido
 
 El archivo de salida generado fue:
 
 s3://sagemaker-us-east-1-995371347105/tarea-6-processing-byoc/output/monthly_sales.csv
 
-Al inspeccionar el resultado en el notebook, se validó que:
+La validación en notebook confirmó que el archivo fue generado correctamente y que su estructura final es la esperada.
 
-el archivo fue creado correctamente
-
-las columnas de salida son:
+Columnas del output
 
 date_block_num
 
@@ -133,26 +137,33 @@ item_id
 
 item_cnt_month
 
-la dimensión del dataset resultante es:
-
+Dimensión del dataset resultante
 (1609124, 4)
 Evidencia de ejecución
 
 Se generaron evidencias de los siguientes puntos:
 
-Processing Job con status Completed en SageMaker
+Processing Job con estatus Completed en SageMaker
 
-Imagen publicada en Amazon ECR
+Repositorio e imagen publicados en Amazon ECR
 
-Archivo de salida en S3
+Archivo de salida almacenado en Amazon S3
 
-Inspección del output en el notebook con df_out.head() y df_out.shape
+Validación del output en notebook mediante:
 
-Dependencias
+df_out.head()
 
-Las principales dependencias utilizadas fueron:
+df_out.shape
+
+Tecnologías y dependencias utilizadas
 
 Python 3.11
+
+Amazon SageMaker
+
+Amazon S3
+
+Amazon ECR
 
 boto3
 
@@ -166,4 +177,4 @@ scikit-learn
 
 Conclusión
 
-Con esta implementación se construyó exitosamente un pipeline de preprocesamiento reproducible usando Amazon SageMaker Processing con un contenedor propio. El enfoque BYOC permitió controlar las dependencias del entorno y desacoplar la lógica de transformación del ambiente local, cumpliendo con el objetivo de generar un flujo escalable y listo para integrarse en etapas posteriores de entrenamiento.
+Con esta implementación se construyó exitosamente un pipeline de preprocesamiento reproducible usando Amazon SageMaker Processing con un contenedor propio. El enfoque BYOC permitió controlar las dependencias del entorno, desacoplar la lógica de transformación del ambiente local y generar un flujo escalable listo para integrarse con etapas posteriores del pipeline de machine learning.
