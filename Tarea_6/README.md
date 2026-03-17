@@ -26,7 +26,7 @@ Tarea_6/
 ```
 ---
 
-Flujo de procesamiento
+## Flujo de procesamiento
 S3 (datos crudos)
    ↓
 /opt/ml/processing/input/
