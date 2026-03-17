@@ -23,6 +23,11 @@ Tarea_6/
 ├── sm_processing_byoc.ipynb
 ├── README.md
 └── requirements.txt
+├── images/
+│   ├── processing_job_completed.png
+│   ├── ecr_repository.png
+│   ├── s3_output.png
+│   └── notebook_output.png
 ```
 ---
 
