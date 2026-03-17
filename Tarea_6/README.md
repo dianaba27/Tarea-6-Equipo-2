@@ -1,137 +1,169 @@
-# Tarea 05: MLOps en Práctica — AWS Sagemaker
+# Tarea 06: SageMaker Processing Job — BYOC con scikit-learn
 ## Diana Arroyo / Luis Cuadros
 
 ## Descripción del proyecto
-Diseño, entrenamiento y despliegue en la nube de un pipeline de Machine Learning de extremo a extremo para pronosticar las ventas mensuales de productos por tienda. El proyecto implementa una arquitectura Bring Your Own Container (BYOC) en Amazon SageMaker, garantizando un entorno escalable, aislado y listo para producción.
+En esta tarea se implementó un SageMaker Processing Job usando el patrón Bring Your Own Container (BYOC) para ejecutar una lógica de preprocesamiento de datos con `scikit-learn`, `pandas` y `numpy`.
 
-Esta tarea pone a prueba los conceptos revisados de MLOps, Docker, Git Workflow y AWS Sagemaker.
+El objetivo fue construir un flujo reproducible y desacoplado del entorno local, donde SageMaker administra la transferencia de archivos entre Amazon S3 y el contenedor, mientras que el script de procesamiento trabaja únicamente con rutas locales dentro de `/opt/ml/processing/`.
+
+El procesamiento realizado transforma el archivo crudo `sales_train.csv` en un dataset agregado a nivel mensual, generando como salida el archivo `monthly_sales.csv`, el cual posteriormente queda almacenado en S3.
 
 ---
 
 ## Estructura del repositorio
 ```text
-.
-├── artifacts
-│   ├── logs
-│   │   ├── prep_20260302_043537.log
-│   │   ├── prep_20260302_044034.log
-│   │   ├── prep_20260302_044117.log
-│   │   └── prep_20260302_044526.log
-│   └── model.joblib
-├── data
-│   ├── images
-│   ├── inference
-│   │   └── test.csv
-│   ├── predictions
-│   │   └── Prediccion_Equipo2.csv
-│   ├── prep
-│   │   └── monthly_sales.csv
-│   └── raw
-│       ├── sales_train.csv
-│       ├── sample_submission.csv
-│       └── test.csv
-├── requirements.txt
-└── src
-    ├── container   #NUEVA CARPETA que sigue la estructura del notebook
-    │   ├── build_and_push.sh
-    │   ├── Dockerfile
-    │   └── scripts-src
-    │       ├── nginx.conf
-    │       ├── predictor.py
-    │       ├── serve
-    │       ├── train
-    │       └── wsgi.py
-    ├── data        #NUEVA CARPETA que sigue la estructura del notebook
-    │   └── monthly_sales.csv    
-    ├── inference
-    │   ├── Dockerfile
-    │   ├── inference.py
-    │   └── test
-    │       └── test_inference.py
-    ├── preprocessing
-    │   ├── Dockerfile
-    │   ├── prep.py
-    │   └── test
-    │       └── test_preprocessing.py
-    ├── training
-    │   ├── Dockerfile
-    │   ├── test
-    │   │   └── test_train.py
-    │   └── train.py
-    └── sm_train_build_your_own_container.ipynb
-
+Tarea_6/
+├── data/
+│   └── raw/
+│       └── sales_train.csv
+├── processing/
+│   ├── container/
+│   │   └── Dockerfile
+│   └── prep.py
+├── sm_processing_byoc.ipynb
+├── README.md
+└── requirements.txt
 ```
 ---
 
-## Git Workflow
-La presente tarea se encuentra en el repositorio llamado Tarea-3-Equipo2 en la rama `feature/sagemaker-training-byoc`. Para subir los cambios se usaron los siguientes comandos:
+Componentes principales
+1. processing/prep.py
 
-```sh
-git checkout feature/sagemaker-training-byoc
-git add .
-git commit -m "AWS Sagemaker"
-git push origin feature/sagemaker-training-byoc
-```
+Este script contiene la lógica de transformación de datos.
+Su función principal es:
 
-La presente rama se creó a partir de la rama `development`.
+leer el archivo crudo desde /opt/ml/processing/input/sales_train.csv
 
+transformar las ventas a nivel mensual
 
-## AWS
+generar el archivo de salida en /opt/ml/processing/output/monthly_sales.csv
 
-#### ECR
+El script no interactúa directamente con S3, ya que SageMaker se encarga de mover los archivos mediante ProcessingInput y ProcessingOutput.
 
-Se creó un repositorio en Amazon ECR llamado **supermarket** a partir del script denominado `build_and_push.sh`.
+2. processing/container/Dockerfile
 
-```sh
-bash build_and_push.sh supermarket
-```
-![ECR](data/images/ecr.png)
+Se construyó una imagen Docker mínima basada en python:3.11-slim, con las dependencias necesarias para ejecutar el script de procesamiento:
 
-#### Buckets
+pandas
 
-El bucket en donde se introdujo el csv de entrenamiento se llamó **sales_supermarket** y se creó a partir del script llamado `build_and_push.sh`.
+numpy
 
-![bucket1](data/images/bucket_input.png)
+scikit-learn
 
-Adicionalmente, se guardó el modelo en el bucket llamado **output**.
+El contenedor se mantuvo simple, sin configuración de clústeres ni archivos adicionales de serving/training, ya que esta tarea corresponde exclusivamente a un Processing Job.
 
-![bucket2](data/images/bucket_output.png)
+Contenido base del contenedor:
 
-#### Entrenamiento
-Se entrenó el script de entrenamiento `train` contenido en la carpeta `src/container/scripts-src` con el siguiente código:
+imagen base: python:3.11-slim
 
-```python
-tree = sage.estimator.Estimator(
-    image,
-    role,
-    1,
-    "ml.c4.2xlarge",
-    output_path=s3_output_path,
-    sagemaker_session=sess,
-)
+instalación de dependencias con pip
 
-tree.fit(data_location)
-```
-A continuación se muestra una captura de pantalla del **output** del entrenamiento del modelo.
+ENTRYPOINT ["python3"]
 
-![training](data/images/training.png)
+3. sm_processing_byoc.ipynb
 
-#### Deploy del modelo
-Se desplegó el modelo usando el siguiente código.
+Este notebook implementa el flujo completo del Processing Job:
 
-```python
-from sagemaker.serializers import CSVSerializer
-predictor = tree.deploy(1, "ml.m4.xlarge", serializer=CSVSerializer())
-```
-A continuación se muestra una captura de pantalla del **output** del deploy del modelo.
+Configuración de la sesión de SageMaker
 
-![deploy](data/images/deploy.png)
+Obtención de región, rol y bucket por defecto
 
-Adicionalmente, se muestra una captura de pantalla de una predicción en tiempo real.
+Definición de rutas locales del proyecto
 
-![prediction](data/images/prediction.png)
+Carga del archivo crudo a S3
 
-#### Endpoint
-Al desplegar el modelo con el código mostrado anteriormente, se creó un endpoint que permite recibir datos en tiempo real y devolver predicciones del modelo entrenado.
+Construcción de la imagen Docker
 
-![endpoint](data/images/endpoint.png)
+Publicación de la imagen en Amazon ECR
+
+Creación y ejecución del ScriptProcessor
+
+Escritura del output en S3
+
+Lectura e inspección del archivo transformado
+
+Flujo de procesamiento
+
+El flujo implementado fue el siguiente:
+
+S3 (datos crudos)
+   ↓
+/opt/ml/processing/input/
+   ↓
+prep.py
+   ↓
+/opt/ml/processing/output/
+   ↓
+S3 (datos procesados)
+
+SageMaker administra automáticamente la transferencia del archivo de entrada y del archivo de salida entre S3 y el contenedor.
+
+Ejecución del Processing Job
+
+El Processing Job se ejecutó mediante ScriptProcessor, usando:
+
+imagen publicada en Amazon ECR
+
+una instancia ml.m5.large
+
+entrada desde S3
+
+salida hacia S3
+
+La ejecución fue exitosa y el script generó correctamente el archivo:
+
+monthly_sales.csv
+Resultado obtenido
+
+El archivo de salida generado fue:
+
+s3://sagemaker-us-east-1-995371347105/tarea-6-processing-byoc/output/monthly_sales.csv
+
+Al inspeccionar el resultado en el notebook, se validó que:
+
+el archivo fue creado correctamente
+
+las columnas de salida son:
+
+date_block_num
+
+shop_id
+
+item_id
+
+item_cnt_month
+
+la dimensión del dataset resultante es:
+
+(1609124, 4)
+Evidencia de ejecución
+
+Se generaron evidencias de los siguientes puntos:
+
+Processing Job con status Completed en SageMaker
+
+Imagen publicada en Amazon ECR
+
+Archivo de salida en S3
+
+Inspección del output en el notebook con df_out.head() y df_out.shape
+
+Dependencias
+
+Las principales dependencias utilizadas fueron:
+
+Python 3.11
+
+boto3
+
+sagemaker
+
+pandas
+
+numpy
+
+scikit-learn
+
+Conclusión
+
+Con esta implementación se construyó exitosamente un pipeline de preprocesamiento reproducible usando Amazon SageMaker Processing con un contenedor propio. El enfoque BYOC permitió controlar las dependencias del entorno y desacoplar la lógica de transformación del ambiente local, cumpliendo con el objetivo de generar un flujo escalable y listo para integrarse en etapas posteriores de entrenamiento.
